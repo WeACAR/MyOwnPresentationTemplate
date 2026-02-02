@@ -800,6 +800,21 @@ const TEMPLATES = {
     fields: ['title', 'chartType', 'chartLabels', 'chartData', 'author'],
     defaults: { title: 'رسم بياني', chartType: 'bar', chartLabels: ['أ', 'ب', 'ج', 'د'], chartData: [25, 45, 30, 50], author: 'Yazeed' }
   },
+  multiChart: {
+    name: 'رسوم متعددة',
+    icon: '📊',
+    fields: ['title', 'multiChartMode', 'chartLabels', 'chartDatasets', 'author'],
+    defaults: { 
+      title: 'رسوم بيانية متعددة', 
+      multiChartMode: 'overlay', 
+      chartLabels: ['أ', 'ب', 'ج', 'د'], 
+      chartDatasets: [
+        { type: 'bar', label: 'البيانات الأولى', data: [25, 45, 30, 50], color: '#00bf63' },
+        { type: 'line', label: 'البيانات الثانية', data: [40, 30, 45, 35], color: '#008cff' }
+      ],
+      author: 'Yazeed' 
+    }
+  },
   intro: {
     name: 'مقدمة',
     icon: '🎬',
@@ -878,6 +893,8 @@ const FIELD_DEFS = {
   chartType: { label: 'نوع الرسم', type: 'select', options: [['bar', 'أعمدة'], ['line', 'خطي'], ['pie', 'دائري'], ['doughnut', 'حلقي'], ['radar', 'رادار']] },
   chartLabels: { label: 'التسميات (مفصولة بفاصلة)', type: 'input' },
   chartData: { label: 'البيانات (مفصولة بفاصلة)', type: 'input' },
+  multiChartMode: { label: 'وضع العرض', type: 'select', options: [['overlay', 'مدمج (فوق بعض)'], ['sideBySide', 'منفصل (جنب بعض)']] },
+  chartDatasets: { label: 'مجموعات البيانات', type: 'chartDatasetsArray' },
   tableHeaders: { label: 'رؤوس الأعمدة', type: 'array' },
   tableRows: { label: 'صفوف الجدول', type: 'table' },
   subtitle: { label: 'العنوان الفرعي', type: 'input' },
@@ -1027,6 +1044,13 @@ function renderTemplateFields() {
       sel.value = slide[fieldKey] || def.options[0][0];
       sel.onchange = () => { slide[fieldKey] = sel.value; renderSlide(); };
     }
+    else if (def.type === 'color') {
+      field.innerHTML = `<label>${def.label}</label><input type="color" id="f_${fieldKey}" />`;
+      container.appendChild(field);
+      const input = field.querySelector('input');
+      input.value = slide[fieldKey] || '#00bf63';
+      input.oninput = () => { slide[fieldKey] = input.value; renderSlide(); };
+    }
     else if (def.type === 'array') {
       field.innerHTML = `<label>${def.label}</label><div id="arr_${fieldKey}"></div><button class="btnGhost btnSmall" onclick="addArrayItem('${fieldKey}')">+ إضافة</button>`;
       container.appendChild(field);
@@ -1046,6 +1070,11 @@ function renderTemplateFields() {
       field.innerHTML = `<label>${def.label}</label><div id="arr_${fieldKey}"></div><button class="btnGhost btnSmall" onclick="addTimelineItem()">+ إضافة</button>`;
       container.appendChild(field);
       renderTimelineField(slide[fieldKey] || []);
+    }
+    else if (def.type === 'chartDatasetsArray') {
+      field.innerHTML = `<label>${def.label}</label><div id="arr_chartDatasets"></div><button class="btnGhost btnSmall" onclick="addChartDataset()">+ إضافة رسم بياني</button>`;
+      container.appendChild(field);
+      renderChartDatasetsField(slide[fieldKey] || []);
     }
   });
 }
@@ -1159,6 +1188,65 @@ window.removeTimelineItem = function(i) {
   renderSlide();
 };
 
+// Chart Datasets (Multi-Chart)
+const CHART_TYPES_OVERLAY = [['bar', 'أعمدة'], ['line', 'خطي'], ['area', 'مساحة']];
+const CHART_TYPES_ALL = [['bar', 'أعمدة'], ['line', 'خطي'], ['area', 'مساحة'], ['pie', 'دائري'], ['doughnut', 'حلقي'], ['radar', 'رادار']];
+const CHART_COLORS = ['#00bf63', '#008cff', '#ff8c00', '#b400ff', '#ff4d4d', '#00d4aa', '#ff6b9d', '#ffd93d'];
+
+function renderChartDatasetsField(datasets) {
+  const container = $('arr_chartDatasets');
+  if (!container) return;
+  container.innerHTML = '';
+  const mode = slides[active].multiChartMode || 'overlay';
+  const chartTypes = mode === 'sideBySide' ? CHART_TYPES_ALL : CHART_TYPES_OVERLAY;
+  
+  datasets.forEach((ds, i) => {
+    const item = document.createElement('div');
+    item.style.cssText = 'background:rgba(255,255,255,.03);padding:12px;border-radius:10px;margin-bottom:10px;border-right:3px solid ' + ds.color;
+    const typeOptions = chartTypes.map(([v, l]) => `<option value="${v}" ${ds.type === v ? 'selected' : ''}>${l}</option>`).join('');
+    item.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:800;color:${ds.color}">رسم ${i + 1}</span>
+        <button class="btnDanger btnSmall" onclick="removeChartDataset(${i})">حذف</button>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <select onchange="updateChartDataset(${i},'type',this.value)" style="flex:1">${typeOptions}</select>
+        <input type="color" value="${ds.color}" onchange="updateChartDataset(${i},'color',this.value)" style="width:50px;flex:none" />
+      </div>
+      <div class="field" style="margin-bottom:8px">
+        <input value="${ds.label || ''}" placeholder="عنوان الرسم" onchange="updateChartDataset(${i},'label',this.value)" />
+      </div>
+      <div class="field">
+        <input value="${Array.isArray(ds.data) ? ds.data.join(', ') : ds.data}" placeholder="البيانات (مفصولة بفاصلة)" onchange="updateChartDataset(${i},'data',this.value)" />
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+window.addChartDataset = function() {
+  if (!slides[active].chartDatasets) slides[active].chartDatasets = [];
+  const idx = slides[active].chartDatasets.length;
+  const color = CHART_COLORS[idx % CHART_COLORS.length];
+  slides[active].chartDatasets.push({ type: 'bar', label: `بيانات ${idx + 1}`, data: [20, 30, 40, 50], color });
+  renderTemplateFields();
+  renderSlide();
+};
+window.updateChartDataset = function(i, key, val) {
+  if (key === 'data') {
+    slides[active].chartDatasets[i][key] = val.split(',').map(s => parseFloat(s.trim()) || 0);
+  } else {
+    slides[active].chartDatasets[i][key] = val;
+  }
+  if (key === 'type') renderTemplateFields();
+  renderSlide();
+};
+window.removeChartDataset = function(i) {
+  slides[active].chartDatasets.splice(i, 1);
+  renderTemplateFields();
+  renderSlide();
+};
+
 // Render the actual slide content
 function renderSlide() {
   const slide = slides[active];
@@ -1235,6 +1323,27 @@ function renderSlide() {
         <div class="slideChart"><canvas id="chartCanvas"></canvas></div>
         <div class="slideFooter"><span>${slide.author || ''}</span><span>${pad2(active + 1)} / ${pad2(slides.length)}</span></div>
       `;
+      break;
+
+    case 'multiChart':
+      const datasets = slide.chartDatasets || [];
+      if (slide.multiChartMode === 'sideBySide') {
+        const cols = Math.min(datasets.length, 3);
+        const canvases = datasets.map((_, i) => `<div class="slideChart" style="height:${datasets.length > 2 ? '180px' : '220px'}"><canvas id="chartCanvasMulti${i}"></canvas></div>`).join('');
+        html = `
+          <div class="slideHeader"><h2 class="slideTitle">${slide.title || ''}</h2></div>
+          <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:15px;margin:20px 0;position:relative;z-index:1">
+            ${canvases}
+          </div>
+          <div class="slideFooter"><span>${slide.author || ''}</span><span>${pad2(active + 1)} / ${pad2(slides.length)}</span></div>
+        `;
+      } else {
+        html = `
+          <div class="slideHeader"><h2 class="slideTitle">${slide.title || ''}</h2></div>
+          <div class="slideChart"><canvas id="chartCanvasMulti"></canvas></div>
+          <div class="slideFooter"><span>${slide.author || ''}</span><span>${pad2(active + 1)} / ${pad2(slides.length)}</span></div>
+        `;
+      }
       break;
 
     case 'intro':
@@ -1372,6 +1481,9 @@ function renderSlide() {
   if (slide.template === 'chart') {
     setTimeout(() => renderChart(slide), 50);
   }
+  if (slide.template === 'multiChart') {
+    setTimeout(() => renderMultiChart(slide), 50);
+  }
 }
 
 function renderChart(slide) {
@@ -1402,6 +1514,109 @@ function renderChart(slide) {
       }
     }
   });
+}
+
+function renderMultiChart(slide) {
+  const labels = typeof slide.chartLabels === 'string' ? slide.chartLabels.split(',').map(s => s.trim()) : slide.chartLabels || [];
+  const datasets = slide.chartDatasets || [];
+
+  const makeDataset = (ds, idx) => {
+    const data = typeof ds.data === 'string' ? ds.data.split(',').map(s => parseFloat(s.trim())) : ds.data || [];
+    const color = ds.color || CHART_COLORS[idx % CHART_COLORS.length];
+    const base = {
+      label: ds.label || `بيانات ${idx + 1}`,
+      data: data,
+      borderColor: color,
+      borderWidth: 2
+    };
+    
+    if (ds.type === 'area') {
+      base.fill = true;
+      base.backgroundColor = hexToRgba(color, 0.2);
+      base.tension = 0.3;
+    } else if (ds.type === 'bar') {
+      base.backgroundColor = hexToRgba(color, 0.7);
+    } else if (ds.type === 'pie' || ds.type === 'doughnut') {
+      base.backgroundColor = data.map((_, i) => hexToRgba(CHART_COLORS[i % CHART_COLORS.length], 0.7));
+      base.borderColor = data.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
+    } else if (ds.type === 'radar') {
+      base.backgroundColor = hexToRgba(color, 0.2);
+      base.pointBackgroundColor = color;
+    } else {
+      base.fill = false;
+      base.backgroundColor = 'transparent';
+      base.tension = 0.3;
+    }
+    
+    if (idx > 0 && slide.multiChartMode === 'overlay') {
+      base.yAxisID = `y${idx}`;
+    }
+    return base;
+  };
+
+  if (slide.multiChartMode === 'sideBySide') {
+    datasets.forEach((ds, i) => {
+      const canvas = $(`chartCanvasMulti${i}`);
+      if (!canvas) return;
+      const data = typeof ds.data === 'string' ? ds.data.split(',').map(s => parseFloat(s.trim())) : ds.data || [];
+      const color = ds.color || CHART_COLORS[i % CHART_COLORS.length];
+      const isPolar = ds.type === 'pie' || ds.type === 'doughnut';
+      
+      new Chart(canvas, {
+        type: ds.type === 'area' ? 'line' : ds.type,
+        data: { 
+          labels, 
+          datasets: [{
+            label: ds.label,
+            data: data,
+            backgroundColor: isPolar ? data.map((_, j) => hexToRgba(CHART_COLORS[j % CHART_COLORS.length], 0.7)) : (ds.type === 'bar' ? hexToRgba(color, 0.7) : (ds.type === 'area' || ds.type === 'radar' ? hexToRgba(color, 0.2) : 'transparent')),
+            borderColor: isPolar ? data.map((_, j) => CHART_COLORS[j % CHART_COLORS.length]) : color,
+            borderWidth: 2,
+            fill: ds.type === 'area',
+            tension: ds.type === 'line' || ds.type === 'area' ? 0.3 : 0,
+            pointBackgroundColor: ds.type === 'radar' ? color : undefined
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: true, labels: { color: '#aaa', font: { size: 10 } } } },
+          scales: isPolar ? {} : { 
+            y: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,.1)' } }, 
+            x: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,.1)' } },
+            ...(ds.type === 'radar' ? { r: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,.1)' } } } : {})
+          }
+        }
+      });
+    });
+  } else {
+    const canvas = $('chartCanvasMulti');
+    if (!canvas) return;
+    
+    const scales = { x: { ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,.1)' } } };
+    datasets.forEach((ds, i) => {
+      const color = ds.color || CHART_COLORS[i % CHART_COLORS.length];
+      if (i === 0) {
+        scales.y = { type: 'linear', position: 'right', ticks: { color }, grid: { color: 'rgba(255,255,255,.1)' } };
+      } else {
+        scales[`y${i}`] = { type: 'linear', position: 'left', ticks: { color }, grid: { drawOnChartArea: false } };
+      }
+    });
+    
+    new Chart(canvas, {
+      data: {
+        labels,
+        datasets: datasets.map((ds, i) => ({
+          ...makeDataset(ds, i),
+          type: ds.type === 'area' ? 'line' : ds.type
+        }))
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: true, labels: { color: '#aaa' } } },
+        scales
+      }
+    });
+  }
 }
 
 function renderThumbs() {
