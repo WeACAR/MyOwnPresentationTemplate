@@ -176,7 +176,7 @@
       z-index:1;
     }
     .slideTitle{
-      font-size:42px;
+      font-size: var(--title-size, 42px);
       line-height:1.12;
       margin:0;
       font-weight:900;
@@ -187,7 +187,7 @@
       text-align:left;
       color:rgba(233,238,247,.78);
       font-weight:700;
-      font-size:14px;
+      font-size: var(--meta-size, 14px);
       white-space:nowrap;
     }
     .chip{
@@ -198,6 +198,7 @@
       border-radius:999px;
       border:1px solid rgba(255,255,255,.18);
       background: rgba(255,255,255,.08);
+      font-size: var(--chip-size, 14px);
       margin-top:10px;
     }
     .chipDot{
@@ -207,7 +208,7 @@
 
     .slideBody{
       margin-top:26px;
-      font-size:20px;
+      font-size: var(--body-size, 20px);
       line-height:1.75;
       color:rgba(233,238,247,.92);
       position:relative;
@@ -227,6 +228,7 @@
       align-items:center;
       color:rgba(233,238,247,.62);
       font-weight:700;
+      font-size: var(--meta-size, 14px);
       z-index:1;
     }
 
@@ -671,6 +673,51 @@
             <div id="templateFields"></div>
           </div>
 
+          <!-- Card Size -->
+          <h3 class="collapsible" data-target="cardSizeSection">📏 حجم البطاقة</h3>
+          <div class="collapsibleContent" id="cardSizeSection">
+            <div class="field">
+              <label>الحجم</label>
+              <select id="cardSizePreset">
+                <option value="small">صغير (540px)</option>
+                <option value="medium" selected>متوسط (720px)</option>
+                <option value="large">كبير (900px)</option>
+                <option value="xlarge">كبير جداً (1080px)</option>
+                <option value="custom">مخصص</option>
+              </select>
+            </div>
+            <div id="cardCustomSizeOptions" style="display:none">
+              <div class="row">
+                <div class="field">
+                  <label>العرض (px)</label>
+                  <input type="number" id="cardCustomWidth" value="720" min="300" max="1920" />
+                </div>
+                <div class="field">
+                  <label>الارتفاع (px)</label>
+                  <input type="number" id="cardCustomHeight" value="450" min="200" max="1080" />
+                </div>
+              </div>
+            </div>
+            <div class="field">
+              <label>نسبة الأبعاد</label>
+              <select id="cardAspectRatio">
+                <option value="auto">تلقائي (حسب المحتوى)</option>
+                <option value="16:9">16:9 عريض</option>
+                <option value="4:3">4:3 كلاسيكي</option>
+                <option value="1:1">1:1 مربع</option>
+                <option value="3:4">3:4 بورتريه</option>
+                <option value="9:16">9:16 ستوري</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>مقياس المحتوى</label>
+              <div class="row" style="align-items:center">
+                <input type="range" id="cardContentScale" min="50" max="150" value="100" />
+                <span id="cardContentScaleValue" style="min-width:40px;text-align:center">100%</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Card Background -->
           <h3 class="collapsible" data-target="cardBgSection">🎨 خلفية البطاقة</h3>
           <div class="collapsibleContent" id="cardBgSection">
@@ -927,6 +974,7 @@ let bgSettings = {
   card: { type: 'gradient', gradient1: '#0a0f1a', gradient2: '#0d1520', solidColor: '#0a1015', imageUrl: '' },
   pdf: { type: 'gradient', gradient1: '#070a12', gradient2: '#0d1420', solidColor: '#0a0f15', syncWithCard: false },
   pageFormat: '16:9',
+  cardSize: { preset: 'medium', width: 720, height: null, aspectRatio: 'auto', contentScale: 100 },
   glows: [
     { color: '#00bf63', x: 30, y: 20, width: 700, height: 400, opacity: 22, spread: 55 },
     { color: '#008cff', x: 85, y: 25, width: 700, height: 500, opacity: 18, spread: 55 }
@@ -977,12 +1025,68 @@ function applyBackgrounds() {
 
 function updateSlideWrapSize() {
   const wrapper = $('exportWrapper');
+  const slide = $('slideExportRoot');
   const formats = {
     '16:9': 16/9, '1:1': 1, '4:5': 4/5, '9:16': 9/16,
     '4:3': 4/3, 'A4': 210/297, 'A4-L': 297/210
   };
   const ratio = formats[bgSettings.pageFormat] || 16/9;
-  const cardWidth = 720;
+  
+  // Card size presets
+  const sizePresets = {
+    small: { width: 540, basePadding: 32, baseFontTitle: 32, baseFontBody: 16 },
+    medium: { width: 720, basePadding: 42, baseFontTitle: 42, baseFontBody: 20 },
+    large: { width: 900, basePadding: 52, baseFontTitle: 52, baseFontBody: 24 },
+    xlarge: { width: 1080, basePadding: 60, baseFontTitle: 60, baseFontBody: 28 }
+  };
+  
+  const { preset, width: customWidth, height: customHeight, aspectRatio, contentScale } = bgSettings.cardSize;
+  let cardWidth, basePadding, baseFontTitle, baseFontBody;
+  
+  if (preset === 'custom') {
+    cardWidth = customWidth || 720;
+    const scaleFactor = cardWidth / 720;
+    basePadding = Math.round(42 * scaleFactor);
+    baseFontTitle = Math.round(42 * scaleFactor);
+    baseFontBody = Math.round(20 * scaleFactor);
+  } else {
+    const presetData = sizePresets[preset] || sizePresets.medium;
+    cardWidth = presetData.width;
+    basePadding = presetData.basePadding;
+    baseFontTitle = presetData.baseFontTitle;
+    baseFontBody = presetData.baseFontBody;
+  }
+  
+  // Apply content scale
+  const scale = contentScale / 100;
+  const finalFontTitle = Math.round(baseFontTitle * scale);
+  const finalFontBody = Math.round(baseFontBody * scale);
+  const finalPadding = Math.round(basePadding * scale);
+  
+  // Calculate card height based on aspect ratio
+  let cardHeight;
+  if (preset === 'custom' && customHeight) {
+    cardHeight = customHeight;
+  } else if (aspectRatio && aspectRatio !== 'auto') {
+    const [w, h] = aspectRatio.split(':').map(Number);
+    cardHeight = Math.round(cardWidth / (w / h));
+  } else {
+    cardHeight = null; // auto height
+  }
+  
+  // Apply to slide
+  slide.style.width = cardWidth + 'px';
+  slide.style.minHeight = cardHeight ? 'unset' : '400px';
+  slide.style.height = cardHeight ? cardHeight + 'px' : 'auto';
+  slide.style.padding = `${finalPadding}px ${Math.round(finalPadding * 1.2)}px`;
+  
+  // Apply font sizes via CSS variables
+  slide.style.setProperty('--title-size', finalFontTitle + 'px');
+  slide.style.setProperty('--body-size', finalFontBody + 'px');
+  slide.style.setProperty('--chip-size', Math.round(finalFontBody * 0.7) + 'px');
+  slide.style.setProperty('--meta-size', Math.round(finalFontBody * 0.7) + 'px');
+  
+  // Update wrapper size based on page format
   const padding = 40;
   let w = cardWidth + padding * 2;
   let h = w / ratio;
@@ -1704,6 +1808,30 @@ $('syncBgWithCard').onchange = function() {
 };
 $('pageFormat').onchange = function() {
   bgSettings.pageFormat = this.value;
+  updateSlideWrapSize();
+};
+
+// Card Size Controls
+$('cardSizePreset').onchange = function() {
+  bgSettings.cardSize.preset = this.value;
+  $('cardCustomSizeOptions').style.display = this.value === 'custom' ? 'block' : 'none';
+  updateSlideWrapSize();
+};
+$('cardCustomWidth').oninput = function() {
+  bgSettings.cardSize.width = parseInt(this.value) || 720;
+  updateSlideWrapSize();
+};
+$('cardCustomHeight').oninput = function() {
+  bgSettings.cardSize.height = parseInt(this.value) || null;
+  updateSlideWrapSize();
+};
+$('cardAspectRatio').onchange = function() {
+  bgSettings.cardSize.aspectRatio = this.value;
+  updateSlideWrapSize();
+};
+$('cardContentScale').oninput = function() {
+  bgSettings.cardSize.contentScale = parseInt(this.value);
+  $('cardContentScaleValue').textContent = this.value + '%';
   updateSlideWrapSize();
 };
 
