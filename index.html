@@ -647,7 +647,10 @@
         <button class="btnGhost" id="btnNew">+ شريحة</button>
         <button class="btnGhost" id="btnDup">نسخ</button>
         <button class="btnDanger" id="btnDel">حذف</button>
+        <button class="btnGhost" id="btnSaveProject">💾 حفظ</button>
+        <button class="btnGhost" id="btnLoadProject">📂 فتح</button>
         <button class="btnAccent" id="btnExport">تصدير PDF</button>
+        <input type="file" id="fileInput" accept=".lgs,.json" style="display:none" />
       </div>
     </header>
 
@@ -1902,8 +1905,141 @@ $('btnExport').onclick = async () => {
   pdf.save('Liquid-Glass-Slides.pdf');
 };
 
+// Save/Load Project
+$('btnSaveProject').onclick = () => {
+  const project = {
+    version: '1.0',
+    createdAt: new Date().toISOString(),
+    slides: slides,
+    bgSettings: bgSettings,
+    active: active
+  };
+  const json = JSON.stringify(project, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Liquid-Glass-Project-${new Date().toISOString().slice(0,10)}.lgs`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+$('btnLoadProject').onclick = () => {
+  $('fileInput').click();
+};
+
+$('fileInput').onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const project = JSON.parse(event.target.result);
+      
+      // Validate project structure
+      if (!project.slides || !Array.isArray(project.slides)) {
+        alert('ملف غير صالح!');
+        return;
+      }
+      
+      // Load slides
+      slides = project.slides;
+      
+      // Load settings if available
+      if (project.bgSettings) {
+        Object.assign(bgSettings, project.bgSettings);
+        
+        // Update UI controls
+        $('cardBgType').value = bgSettings.card.type;
+        $('cardGradient1').value = bgSettings.card.gradient1;
+        $('cardGradient2').value = bgSettings.card.gradient2;
+        $('cardSolidColor').value = bgSettings.card.solidColor;
+        $('cardImageUrl').value = bgSettings.card.imageUrl || '';
+        
+        $('pdfBgType').value = bgSettings.pdf.type;
+        $('pdfGradient1').value = bgSettings.pdf.gradient1;
+        $('pdfGradient2').value = bgSettings.pdf.gradient2;
+        $('pdfSolidColor').value = bgSettings.pdf.solidColor;
+        $('syncBgWithCard').checked = bgSettings.pdf.syncWithCard;
+        
+        $('pageFormat').value = bgSettings.pageFormat;
+        
+        if (bgSettings.cardSize) {
+          $('cardSizePreset').value = bgSettings.cardSize.preset;
+          $('cardCustomWidth').value = bgSettings.cardSize.width;
+          $('cardCustomHeight').value = bgSettings.cardSize.height || 450;
+          $('cardAspectRatio').value = bgSettings.cardSize.aspectRatio;
+          $('cardContentScale').value = bgSettings.cardSize.contentScale;
+          $('cardContentScaleValue').textContent = bgSettings.cardSize.contentScale + '%';
+          $('cardCustomSizeOptions').style.display = bgSettings.cardSize.preset === 'custom' ? 'block' : 'none';
+        }
+        
+        // Update visibility
+        $('cardGradientOptions').style.display = bgSettings.card.type === 'gradient' ? 'block' : 'none';
+        $('cardSolidOptions').style.display = bgSettings.card.type === 'solid' ? 'block' : 'none';
+        $('cardImageOptions').style.display = bgSettings.card.type === 'image' ? 'block' : 'none';
+        $('pdfGradientOptions').style.display = bgSettings.pdf.type === 'gradient' ? 'block' : 'none';
+        $('pdfSolidOptions').style.display = bgSettings.pdf.type === 'solid' ? 'block' : 'none';
+        $('pdfCustomBgOptions').style.display = bgSettings.pdf.syncWithCard ? 'none' : 'block';
+      }
+      
+      // Set active slide
+      active = project.active || 0;
+      if (active >= slides.length) active = 0;
+      
+      // Refresh UI
+      renderActive();
+      renderGlowsList();
+      updateSlideWrapSize();
+      applyBackgrounds();
+      
+      alert('تم تحميل المشروع بنجاح! \nعدد الشرائح: ' + slides.length);
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ في قراءة الملف!');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ''; // Reset input
+};
+
+// Auto-save to localStorage
+function autoSave() {
+  const project = { slides, bgSettings, active };
+  localStorage.setItem('liquidGlassAutoSave', JSON.stringify(project));
+}
+
+function loadAutoSave() {
+  const saved = localStorage.getItem('liquidGlassAutoSave');
+  if (saved) {
+    try {
+      const project = JSON.parse(saved);
+      if (project.slides && project.slides.length > 0) {
+        return project;
+      }
+    } catch(e) {}
+  }
+  return null;
+}
+
+// Auto-save every 30 seconds
+setInterval(autoSave, 30000);
+
 // Init
-slides = [createSlide('intro')];
+const autoSaved = loadAutoSave();
+if (autoSaved && autoSaved.slides.length > 0) {
+  if (confirm('يوجد مشروع محفوظ تلقائياً. هل تريد استعادته؟')) {
+    slides = autoSaved.slides;
+    if (autoSaved.bgSettings) Object.assign(bgSettings, autoSaved.bgSettings);
+    active = autoSaved.active || 0;
+  } else {
+    slides = [createSlide('intro')];
+    localStorage.removeItem('liquidGlassAutoSave');
+  }
+} else {
+  slides = [createSlide('intro')];
+}
 renderActive();
 renderGlowsList();
 updateSlideWrapSize();
